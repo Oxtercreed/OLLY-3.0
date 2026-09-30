@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, ArrowLeft, Trash2, Pencil } from 'lucide-react'
+import { Plus, ArrowLeft, Trash2, Pencil, Printer, Search, TrendingUp, Wallet, ArrowDownLeft, BarChart3 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatMoney } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
-import { Card } from '../../components/ui/Card'
+import { Card, KPICard } from '../../components/ui/Card'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Modal } from '../../components/ui/Modal'
 import { Input } from '../../components/ui/Input'
@@ -13,6 +13,8 @@ import { useToast } from '../../components/ui/Toast'
 import { useLanguage } from '../../i18n/LanguageContext'
 import { SelectionCard } from '../../components/ui/SelectionCard'
 import { PeriodPicker, getPeriodRange } from '../../components/ui/PeriodPicker'
+import { deleteSale } from '../../services/salesService'
+import { cn } from '../../utils/cn'
 
 export default function SalesPage() {
   const { t, lang } = useLanguage()
@@ -30,16 +32,17 @@ export default function SalesPage() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [customers, setCustomers] = useState([])
+  const [searchQuery, setSearchQuery] = useState('')
   const [editForm, setEditForm] = useState({ customer_id: null, payment_method: 'cash', paid_amount: 0, payment_status: 'paid' })
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('sales')
-      .select('id, invoice_number, sale_date, total_amount, paid_amount, payment_status, payment_method, cogs_amount, customer_id, customers(name)')
-      .neq('payment_status', 'cancelled')
+      .select('id, invoice_number, sale_date, total_amount, paid_amount, payment_status, payment_method, cogs_amount, customer_id, notes, customers(name)')
       .order('created_at', { ascending: false })
       .limit(100)
+    if (error) console.error('Error loading sales:', error)
     setSales(data || [])
     setLoading(false)
   }
@@ -109,7 +112,7 @@ export default function SalesPage() {
     if (!selected) return
     setDeleting(true)
     try {
-      const { error } = await supabase.rpc('delete_sale', { p_sale_id: selected.id })
+      const { error } = await deleteSale(selected.id)
       if (error) throw error
       addToast(t('saleDeleted'))
       setConfirmDelete(false)
@@ -122,14 +125,62 @@ export default function SalesPage() {
     }
   }
 
+  function handleCopyReceipt() {
+    if (!selected) return
+    const lines = [
+      `============================`,
+      `OLLY - SALES RECEIPT`,
+      `Invoice: ${selected.invoice_number}`,
+      `Date: ${selected.sale_date}`,
+      `Customer: ${selected.customers?.name || t('walkIn')}`,
+      `============================`,
+      ...items.map(
+        (i) =>
+          `${i.products?.name || 'Item'} x ${i.quantity} = ${formatMoney(Number(i.quantity) * Number(i.unit_price))}`
+      ),
+      `----------------------------`,
+      `Total: ${formatMoney(selected.total_amount)}`,
+      `Paid: ${formatMoney(selected.paid_amount)} (${selected.payment_method?.replace('_', ' ')})`,
+      `Balance: ${formatMoney(Math.max(0, Number(selected.total_amount) - Number(selected.paid_amount)))}`,
+      `Status: ${selected.payment_status?.toUpperCase()}`,
+      `============================`,
+      `Thank you for your business!`,
+    ]
+    navigator.clipboard?.writeText(lines.join('\n'))
+    addToast(lang === 'sw' ? 'Muhtasari wa risiti umenakiliwa!' : 'Receipt copied to clipboard!')
+  }
+
+  function getCustomerName(s) {
+    if (s?.customers?.name) return s.customers.name
+    if (s?.notes) {
+      if (s.notes.includes(' · ')) {
+        const parts = s.notes.split(' · ')
+        return parts[parts.length - 1]
+      }
+    }
+    return t('walkIn')
+  }
+
   const range = getPeriodRange(period, customFrom, customTo)
   const filtered = sales.filter((s) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      const inv = (s.invoice_number || '').toLowerCase()
+      const cust = getCustomerName(s).toLowerCase()
+      const notes = (s.notes || '').toLowerCase()
+      if (!inv.includes(q) && !cust.includes(q) && !notes.includes(q)) return false
+    }
     if (filter === 'paid' && s.payment_status !== 'paid') return false
     if (filter === 'credit' && s.payment_status !== 'pending' && s.payment_status !== 'partial') return false
     if (range.from && s.sale_date < range.from) return false
     if (range.to && s.sale_date > range.to) return false
     return true
   })
+
+  const totalSalesAmount = filtered.reduce((sum, s) => sum + Number(s.total_amount || 0), 0)
+  const totalPaidAmount = filtered.reduce((sum, s) => sum + Number(s.paid_amount || 0), 0)
+  const totalOutstanding = filtered.reduce((sum, s) => sum + Math.max(0, Number(s.total_amount || 0) - Number(s.paid_amount || 0)), 0)
+  const totalProfit = filtered.reduce((sum, s) => sum + (Number(s.total_amount || 0) - Number(s.cogs_amount || 0)), 0)
 
   const chips = [
     { id: 'all', label: lang === 'sw' ? 'Zote' : 'All' },
@@ -147,7 +198,10 @@ export default function SalesPage() {
         <div className="flex justify-between items-start mb-6">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{selected.invoice_number}</h1>
-            <p className="text-sm text-[#707070] mt-0.5">{selected.sale_date} · {selected.customers?.name || t('walkIn')}</p>
+            <p className="text-sm text-[#707070] mt-0.5">
+              {selected.sale_date} · {getCustomerName(selected)}
+              {selected.notes ? ` (${selected.notes})` : ''}
+            </p>
           </div>
           <StatusBadge status={selected.payment_status} />
         </div>
@@ -176,11 +230,14 @@ export default function SalesPage() {
           </div>
         </Card>
 
-        <div className="flex gap-2 mb-3">
-          <Button variant="secondary" className="flex-1" onClick={openEdit}>
+        <div className="flex flex-wrap gap-2 mb-3">
+          <Button variant="secondary" className="flex-1 min-w-[130px]" onClick={handleCopyReceipt}>
+            <Printer className="w-4 h-4" /> {lang === 'sw' ? 'Nakili Risiti' : 'Copy Receipt'}
+          </Button>
+          <Button variant="secondary" className="flex-1 min-w-[100px]" onClick={openEdit}>
             <Pencil className="w-4 h-4" /> {t('edit')}
           </Button>
-          <Button variant="secondary" className="flex-1 text-[#B4534A]" onClick={() => setConfirmDelete(true)}>
+          <Button variant="secondary" className="flex-1 min-w-[100px] text-[#B4534A]" onClick={() => setConfirmDelete(true)}>
             <Trash2 className="w-4 h-4" /> {t('delete')}
           </Button>
         </div>
@@ -245,7 +302,57 @@ export default function SalesPage() {
           onCustomChange={(f, to) => { setCustomFrom(f); setCustomTo(to) }}
         />
         <FilterChips options={chips} value={filter} onChange={setFilter} />
+
+        {/* Search input */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-[#707070] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            className="w-full h-10 pl-10 pr-10 rounded-xl border border-[#E8E8E5] text-sm bg-white focus:outline-none focus:border-[#181818]"
+            placeholder={lang === 'sw' ? 'Tafuta mteja au namba ya risiti...' : 'Search by customer or invoice #...'}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#707070] hover:text-[#181818]"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* KPI Summary Cards */}
+      {!loading && sales.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-5">
+          <KPICard
+            label={lang === 'sw' ? 'Jumla ya Mauzo' : 'Total sales'}
+            value={formatMoney(totalSalesAmount)}
+            icon={TrendingUp}
+            subtext={`${filtered.length} ${filtered.length === 1 ? (lang === 'sw' ? 'uuzaji' : 'order') : (lang === 'sw' ? 'mauzo' : 'orders')}`}
+          />
+          <KPICard
+            label={lang === 'sw' ? 'Yaliyolipwa' : 'Paid / Collected'}
+            value={formatMoney(totalPaidAmount)}
+            icon={Wallet}
+            subtext={lang === 'sw' ? 'Mkusanyiko' : 'Inflow'}
+          />
+          <KPICard
+            label={lang === 'sw' ? 'Deni / Mkopo' : 'Unpaid (Mkopo)'}
+            value={formatMoney(totalOutstanding)}
+            icon={ArrowDownLeft}
+            subtext={lang === 'sw' ? 'Linadaiwa' : 'Outstanding'}
+          />
+          <KPICard
+            label={lang === 'sw' ? 'Faida Ghafi' : 'Gross profit'}
+            value={formatMoney(totalProfit)}
+            icon={BarChart3}
+            subtext={totalSalesAmount > 0 ? `${Math.round((totalProfit / totalSalesAmount) * 100)}% margin` : '0% margin'}
+          />
+        </div>
+      )}
 
       {loading ? (
         <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="skeleton h-20" />)}</div>
@@ -271,7 +378,10 @@ export default function SalesPage() {
                 {filtered.map((s) => (
                   <tr key={s.id} onClick={() => openDetail(s)} className="border-b border-[#E8E8E5] last:border-0 hover:bg-[#F7F7F5] cursor-pointer">
                     <td className="px-5 py-3.5">{s.sale_date}</td>
-                    <td className="px-5 py-3.5">{s.customers?.name || t('walkIn')}</td>
+                    <td className="px-5 py-3.5">
+                      <div className="font-medium">{getCustomerName(s)}</div>
+                      {s.notes && <div className="text-xs text-[#707070] truncate max-w-xs">{s.notes}</div>}
+                    </td>
                     <td className="px-5 py-3.5 text-[#707070]">{s.invoice_number}</td>
                     <td className="px-5 py-3.5 text-right tabular-nums font-medium">{formatMoney(s.total_amount)}</td>
                     <td className="px-5 py-3.5"><StatusBadge status={s.payment_status} /></td>
@@ -286,8 +396,9 @@ export default function SalesPage() {
                 <Card className="!p-4">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="font-medium">{s.customers?.name || t('walkIn')}</p>
+                      <p className="font-medium">{getCustomerName(s)}</p>
                       <p className="text-xs text-[#707070] mt-0.5">{s.sale_date} · {s.invoice_number}</p>
+                      {s.notes && <p className="text-xs text-[#707070] mt-0.5 line-clamp-1">{s.notes}</p>}
                     </div>
                     <p className="font-semibold tabular-nums">{formatMoney(s.total_amount)}</p>
                   </div>

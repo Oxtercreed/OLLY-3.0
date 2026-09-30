@@ -3,6 +3,9 @@
  * Caches reference data; queues write actions; flushes when online.
  */
 
+import { recordSale } from '../services/salesService'
+import { recordPurchase } from '../services/purchaseService'
+
 const DB_NAME = 'olly-offline'
 const DB_VER = 1
 const QUEUE = 'queue'
@@ -116,12 +119,25 @@ async function applyAction(supabase, item) {
   const { type, payload } = item
   switch (type) {
     case 'sale': {
-      const { error } = await supabase.rpc('record_sale', payload)
+      const { error } = await recordSale({
+        customerId: payload.p_customer_id,
+        items: payload.p_items,
+        paymentMethod: payload.p_payment_method,
+        paidAmount: payload.p_paid_amount,
+        notes: payload.p_notes,
+      })
       if (error) throw error
       break
     }
     case 'purchase': {
-      const { error } = await supabase.rpc('record_purchase', payload)
+      const { error } = await recordPurchase({
+        supplierId: payload.p_supplier_id,
+        items: payload.p_items,
+        paymentMethod: payload.p_payment_method,
+        paidAmount: payload.p_paid_amount,
+        invoiceNumber: payload.p_invoice_number,
+        notes: payload.p_notes,
+      })
       if (error) throw error
       break
     }

@@ -9,6 +9,7 @@ import { StatusBadge } from '../../components/ui/StatusBadge'
 import { FilterChips } from '../../components/ui/FilterChips'
 import { useToast } from '../../components/ui/Toast'
 import { cn } from '../../utils/cn'
+import { completeOrder as completeOrderService } from '../../services/orderService'
 
 export default function OrdersPage() {
   const { addToast } = useToast()
@@ -56,12 +57,12 @@ export default function OrdersPage() {
     if (!selected) return
     setCompleting(true)
     try {
-      const { data, error } = await supabase.rpc('complete_order', {
-        p_order_id: selected.id,
-        p_payment_method: payMethod,
+      const { data, error } = await completeOrderService({
+        orderId: selected.id,
+        paymentMethod: payMethod,
       })
       if (error) throw error
-      addToast('Order completed — sale recorded & stock updated')
+      addToast(`Order completed — Sale recorded (${data?.invoice_number || 'Linked'})`)
       setSelected(null)
       await load()
     } catch (e) {
@@ -107,6 +108,20 @@ export default function OrdersPage() {
           ))}
           {selected.notes && <p className="text-sm text-[#707070] pt-2 border-t border-[#E8E8E5]">{selected.notes}</p>}
         </Card>
+
+        {selected.status === 'completed' && (
+          <div className="p-4 mb-4 rounded-2xl bg-[#3F8065]/10 border border-[#3F8065]/20 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-semibold text-[#3F8065]">Order Completed</p>
+              <p className="text-xs text-[#707070] mt-0.5">Recorded as sale, stock deducted & invoice linked</p>
+            </div>
+            <Link to="/sales">
+              <Button variant="secondary" className="!h-9 !text-xs">
+                View in Sales →
+              </Button>
+            </Link>
+          </div>
+        )}
 
         {selected.status !== 'completed' && selected.status !== 'cancelled' && (
           <div className="space-y-2">
@@ -159,12 +174,14 @@ export default function OrdersPage() {
         <div className="space-y-3">
           {filtered.map((o) => (
             <button key={o.id} type="button" onClick={() => openDetail(o)} className="w-full text-left">
-              <Card className="!p-4 flex justify-between items-center hover:border-[#C8C8C5]">
-                <div>
-                  <p className="font-medium">{o.customers?.name || o.customer_name || 'Customer'}</p>
-                  <p className="text-xs text-[#707070] mt-0.5">{o.order_number}{o.due_date ? ` · due ${o.due_date}` : ''}</p>
+              <Card className="!p-4 hover:border-[#181818] hover:shadow-xs transition-all">
+                <div className="flex justify-between items-center w-full">
+                  <div>
+                    <p className="font-medium">{o.customers?.name || o.customer_name || 'Customer'}</p>
+                    <p className="text-xs text-[#707070] mt-0.5">{o.order_number}{o.due_date ? ` · due ${o.due_date}` : ''}</p>
+                  </div>
+                  <StatusBadge status={o.status} />
                 </div>
-                <StatusBadge status={o.status} />
               </Card>
             </button>
           ))}

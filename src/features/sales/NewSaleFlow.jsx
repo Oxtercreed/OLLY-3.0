@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Minus, Plus, Check, UserPlus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { formatMoney } from '../../utils/format'
+import { formatMoney, getProductStock } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
 import { SelectionCard } from '../../components/ui/SelectionCard'
 import { Input } from '../../components/ui/Input'
@@ -11,6 +11,7 @@ import { useToast } from '../../components/ui/Toast'
 import { FlowShell, FlowContinue } from '../../components/layout/FlowShell'
 import { cn } from '../../utils/cn'
 import { isOnline, enqueue, cacheSet, cacheGet } from '../../lib/offline'
+import { recordSale } from '../../services/salesService'
 
 export default function NewSaleFlow() {
   const navigate = useNavigate()
@@ -42,16 +43,17 @@ export default function NewSaleFlow() {
       try {
         const { data: p } = await supabase
           .from('products')
-          .select('id, name, selling_price, unit')
-          .eq('type', 'finished_good')
+          .select('id, name, selling_price, unit, type')
           .eq('is_active', true)
           .order('name')
         const { data: bals } = await supabase.from('inventory_balances').select('product_id, quantity')
         const balMap = Object.fromEntries((bals || []).map((b) => [b.product_id, Number(b.quantity)]))
-        const list = (p || []).map((row) => ({
-          ...row,
-          inventory_balances: [{ quantity: balMap[row.id] ?? 0 }],
-        }))
+        const list = (p || [])
+          .filter((item) => item.type === 'finished_good' || Number(item.selling_price) > 0)
+          .map((row) => ({
+            ...row,
+            inventory_balances: { quantity: balMap[row.id] ?? 0 },
+          }))
         setProducts(list)
         await cacheSet('products_fg', list)
       } catch {
@@ -123,19 +125,27 @@ export default function NewSaleFlow() {
         quantity: i.qty,
         unit_price: Number(i.selling_price),
       }))
-      const payload = {
-        p_customer_id: customerType === 'existing' ? selectedCustomer : null,
-        p_items: items,
-        p_payment_method: paymentMethod,
-        p_paid_amount: paymentMethod === 'credit' ? 0 : total,
+      const saleData = {
+        customerId: customerType === 'existing' ? selectedCustomer : null,
+        items,
+        paymentMethod,
+        paidAmount: paymentMethod === 'credit' ? 0 : total,
       }
       if (!isOnline()) {
-        await enqueue({ type: 'sale', payload })
+        await enqueue({
+          type: 'sale',
+          payload: {
+            p_customer_id: saleData.customerId,
+            p_items: items,
+            p_payment_method: paymentMethod,
+            p_paid_amount: saleData.paidAmount,
+          },
+        })
         setSuccess({ total, invoice_number: 'OFFLINE-PENDING', gross_profit: null, offline: true })
         addToast('Sale saved offline — will sync when online')
         return
       }
-      const { data, error: err } = await supabase.rpc('record_sale', payload)
+      const { data, error: err } = await recordSale(saleData)
       if (err) throw err
       setSuccess(data)
       addToast('Sale completed')
@@ -250,7 +260,7 @@ export default function NewSaleFlow() {
             )}
             {products.map((p) => {
               const qty = cart[p.id] || 0
-              const stock = Number(p.inventory_balances?.[0]?.quantity || 0)
+              const stock = getProductStock(p)
               return (
                 <div key={p.id} className={cn('p-4 rounded-2xl border-2 bg-white', qty > 0 ? 'border-[#181818]' : 'border-[#E8E8E5]')}>
                   <div className="flex items-center justify-between">

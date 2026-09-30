@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, ArrowLeft } from 'lucide-react'
+import { Plus, ArrowLeft, Factory, ChevronRight, Search } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatMoney, formatNumber } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
@@ -15,10 +15,11 @@ export default function ProductionPage() {
   const [selected, setSelected] = useState(null)
   const [consumptions, setConsumptions] = useState([])
   const [statusFilter, setStatusFilter] = useState('all')
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     supabase.from('production_batches')
-      .select('id, batch_number, planned_quantity, actual_quantity, waste_quantity, waste_reason, status, material_cost, packaging_cost, labor_cost, overhead_cost, total_cost, unit_cost, started_at, completed_at, products(name)')
+      .select('id, batch_number, planned_quantity, actual_quantity, waste_quantity, waste_reason, status, material_cost, packaging_cost, labor_cost, overhead_cost, total_cost, unit_cost, started_at, completed_at, created_at, products(name)')
       .order('created_at', { ascending: false })
       .limit(50)
       .then(({ data }) => { setBatches(data || []); setLoading(false) })
@@ -105,6 +106,17 @@ export default function ProductionPage() {
     )
   }
 
+  const filtered = batches.filter((b) => {
+    if (statusFilter !== 'all' && b.status !== statusFilter) return false
+    if (search.trim()) {
+      const q = search.toLowerCase()
+      const name = (b.products?.name || '').toLowerCase()
+      const num = (b.batch_number || '').toLowerCase()
+      if (!name.includes(q) && !num.includes(q)) return false
+    }
+    return true
+  })
+
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
@@ -115,42 +127,121 @@ export default function ProductionPage() {
         <Link to="/production/new"><Button><Plus className="w-4 h-4" /> New production</Button></Link>
       </div>
 
-      <FilterChips
-        options={[
-          { id: 'all', label: 'All' },
-          { id: 'in_progress', label: 'In progress' },
-          { id: 'completed', label: 'Completed' },
-        ]}
-        value={statusFilter}
-        onChange={setStatusFilter}
-        className="mb-5"
-      />
+      <div className="space-y-3 mb-5">
+        <FilterChips
+          options={[
+            { id: 'all', label: 'All' },
+            { id: 'in_progress', label: 'In progress' },
+            { id: 'completed', label: 'Completed' },
+          ]}
+          value={statusFilter}
+          onChange={setStatusFilter}
+        />
+
+        <div className="relative">
+          <Search className="w-4 h-4 text-[#707070] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            className="w-full h-10 pl-10 pr-10 rounded-xl border border-[#E8E8E5] text-sm bg-white focus:outline-none focus:border-[#181818]"
+            placeholder="Search by product name or batch #..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#707070] hover:text-[#181818]"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+      </div>
 
       {loading ? (
         <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="skeleton h-20" />)}</div>
-      ) : batches.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <Card className="text-center py-12">
-          <p className="text-[#707070] mb-4">No batches yet</p>
-          <Link to="/production/new"><Button>Start first production</Button></Link>
+          <p className="text-[#707070] mb-4">
+            {batches.length === 0 ? 'No batches yet' : 'No batches match this filter'}
+          </p>
+          {batches.length === 0 && (
+            <Link to="/production/new"><Button>Start first production</Button></Link>
+          )}
         </Card>
       ) : (
         <div className="space-y-3">
-          {(statusFilter === 'all' ? batches : batches.filter(b => b.status === statusFilter)).map((b) => (
-            <button key={b.id} onClick={() => openDetail(b)} className="w-full text-left">
-              <Card className="!p-4 flex justify-between items-center hover:border-[#C8C8C5] transition-colors">
-                <div>
-                  <p className="font-medium">{b.products?.name}</p>
-                  <p className="text-xs text-[#707070] mt-0.5">{b.batch_number}</p>
-                </div>
-                <div className="text-right">
-                  <p className="tabular-nums font-medium">
-                    {b.actual_quantity ?? b.planned_quantity} units
-                  </p>
-                  <div className="mt-1"><StatusBadge status={b.status} /></div>
-                </div>
-              </Card>
-            </button>
-          ))}
+          {filtered.map((b) => {
+            const dateStr = b.completed_at || b.started_at || b.created_at
+            const formattedDate = dateStr
+              ? new Date(dateStr).toLocaleDateString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : 'Recent'
+
+            return (
+              <button
+                key={b.id}
+                onClick={() => openDetail(b)}
+                className="w-full text-left focus:outline-none group block"
+              >
+                <Card className="!p-4 sm:!p-5 hover:border-[#181818] hover:shadow-xs transition-all">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 w-full">
+                    {/* Left: Icon, Product name, Batch #, Date & Cost */}
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-10 h-10 rounded-xl bg-[#F7F7F5] border border-[#E8E8E5] flex items-center justify-center text-[#707070] shrink-0 group-hover:bg-[#181818] group-hover:text-white group-hover:border-[#181818] transition-all">
+                        <Factory className="w-5 h-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-semibold text-base text-[#181818] tracking-tight truncate">
+                            {b.products?.name || 'Finished Good'}
+                          </h3>
+                          <span className="font-mono text-xs px-2 py-0.5 rounded-md bg-[#F4F4F2] border border-[#E8E8E5] text-[#707070]">
+                            {b.batch_number}
+                          </span>
+                        </div>
+                        <div className="text-xs text-[#707070] mt-1 flex items-center gap-2 flex-wrap">
+                          <span>{formattedDate}</span>
+                          {Number(b.unit_cost || 0) > 0 && (
+                            <>
+                              <span>·</span>
+                              <span className="tabular-nums font-medium text-[#181818]">
+                                {formatMoney(b.unit_cost)} / unit
+                              </span>
+                            </>
+                          )}
+                          {Number(b.waste_quantity || 0) > 0 && (
+                            <>
+                              <span>·</span>
+                              <span className="text-[#B4534A]">
+                                {formatNumber(b.waste_quantity)} waste
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right: Quantity, Status badge, Chevron */}
+                    <div className="flex items-center justify-between sm:justify-end gap-3 sm:gap-5 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-[#F0F0EE]">
+                      <div className="text-left sm:text-right">
+                        <div className="font-semibold text-base tabular-nums text-[#181818]">
+                          {formatNumber(b.actual_quantity ?? b.planned_quantity)} units
+                        </div>
+                        <div className="mt-1 flex sm:justify-end">
+                          <StatusBadge status={b.status} />
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[#A0A09B] group-hover:text-[#181818] group-hover:translate-x-0.5 transition-all hidden sm:block" />
+                    </div>
+                  </div>
+                </Card>
+              </button>
+            )
+          })}
         </div>
       )}
     </div>

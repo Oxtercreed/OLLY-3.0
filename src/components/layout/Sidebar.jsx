@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Tag, ShoppingCart, Factory, Package,
-  Users, Truck, DollarSign, UsersRound, FileText, Settings, ChevronLeft, ClipboardList, UserCog
+  Users, Truck, DollarSign, UsersRound, FileText, Settings, ChevronLeft, ClipboardList, UserCog, LogOut
 } from 'lucide-react'
 import { cn } from '../../utils/cn'
 import { useAuth } from '../../context/AuthContext'
@@ -46,7 +46,7 @@ const nav = [
 ]
 
 export function Sidebar({ collapsed, onToggle }) {
-  const { can } = useAuth()
+  const { can, signOut } = useAuth()
 
   return (
     <aside
@@ -92,6 +92,23 @@ export function Sidebar({ collapsed, onToggle }) {
           )
         })}
       </nav>
+
+      {/* Logout button below everything with red borders and background */}
+      <div className="p-3 border-t border-[#E8E8E5] shrink-0">
+        <button
+          type="button"
+          onClick={signOut}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 cursor-pointer shadow-2xs',
+            'bg-[#FEF2F2] text-[#DC2626] border border-[#FCA5A5] hover:bg-[#FEE2E2] hover:border-[#F87171] active:scale-[0.98]',
+            collapsed && 'justify-center px-2'
+          )}
+          title="Log out"
+        >
+          <LogOut className="w-4 h-4 shrink-0 text-[#DC2626]" strokeWidth={2} />
+          {!collapsed && <span>Log out</span>}
+        </button>
+      </div>
     </aside>
   )
 }

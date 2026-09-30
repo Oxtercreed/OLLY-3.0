@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { Plus, Wallet, TrendingUp, ArrowDownLeft, ArrowUpRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { formatMoney } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
@@ -75,10 +75,10 @@ export default function FinancePage() {
           {tab === 'overview' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                <KPICard label="Net profit" value={formatMoney(profit.net_profit)} />
-                <KPICard label="Revenue" value={formatMoney(profit.revenue)} />
-                <KPICard label="To collect" value={formatMoney(toCollect)} />
-                <KPICard label="To pay" value={formatMoney(toPay)} />
+                <KPICard label="Net profit" value={formatMoney(profit.net_profit)} icon={Wallet} />
+                <KPICard label="Revenue" value={formatMoney(profit.revenue)} icon={TrendingUp} />
+                <KPICard label="To collect" value={formatMoney(toCollect)} icon={ArrowDownLeft} />
+                <KPICard label="To pay" value={formatMoney(toPay)} icon={ArrowUpRight} />
               </div>
               <div className="grid md:grid-cols-2 gap-4">
                 <Card>

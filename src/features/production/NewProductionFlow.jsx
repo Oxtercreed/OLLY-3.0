@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Minus, Plus, Check } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { formatNumber, formatMoney } from '../../utils/format'
+import { formatNumber, formatMoney, getProductStock } from '../../utils/format'
 import { Button } from '../../components/ui/Button'
 import { SelectionCard } from '../../components/ui/SelectionCard'
 import { Input } from '../../components/ui/Input'
@@ -57,7 +57,7 @@ export default function NewProductionFlow() {
       const mats = (recipe.recipe_items || []).map((ri) => ({
         ...ri,
         required: Number(ri.quantity) * quantity,
-        available: Number(ri.products?.inventory_balances?.[0]?.quantity || 0),
+        available: getProductStock(ri.products),
       }))
       setMaterials(mats)
     } else {

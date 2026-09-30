@@ -456,13 +456,6 @@ BEGIN
     v_cost := COALESCE(v_product.cost_price, 0);
     v_total := v_total + (v_qty * v_price);
     v_cogs := v_cogs + (v_qty * v_cost);
-
-    INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, unit_cost)
-    VALUES (v_sale_id, v_product.id, v_qty, v_price, v_cost);
-
-    -- Inventory out
-    INSERT INTO inventory_movements (product_id, movement_type, quantity, unit_cost, reference_type, reference_id)
-    VALUES (v_product.id, 'sale', -v_qty, v_cost, 'sale', v_sale_id);
   END LOOP;
 
   v_paid := COALESCE(p_paid_amount, CASE WHEN p_payment_method = 'credit' THEN 0 ELSE v_total END);
@@ -474,8 +467,25 @@ BEGIN
     v_status := 'pending';
   END IF;
 
+  -- Insert parent sale FIRST so foreign key in sale_items succeeds
   INSERT INTO sales (id, customer_id, sale_date, invoice_number, total_amount, paid_amount, payment_method, payment_status, cogs_amount, notes)
   VALUES (v_sale_id, p_customer_id, CURRENT_DATE, v_invoice, v_total, v_paid, p_payment_method, v_status, v_cogs, p_notes);
+
+  -- Insert child sale_items and inventory movements
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    v_qty := (v_item->>'quantity')::NUMERIC;
+    v_price := (v_item->>'unit_price')::NUMERIC;
+    SELECT * INTO v_product FROM products WHERE id = (v_item->>'product_id')::UUID;
+    v_cost := COALESCE(v_product.cost_price, 0);
+
+    INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, unit_cost)
+    VALUES (v_sale_id, v_product.id, v_qty, v_price, v_cost);
+
+    -- Inventory out
+    INSERT INTO inventory_movements (product_id, movement_type, quantity, unit_cost, reference_type, reference_id)
+    VALUES (v_product.id, 'sale', -v_qty, v_cost, 'sale', v_sale_id);
+  END LOOP;
 
   -- Ledger: revenue + COGS
   INSERT INTO ledger_entries (entry_type, amount, description, reference_type, reference_id, entry_date)
@@ -528,12 +538,29 @@ DECLARE
 BEGIN
   v_purchase_id := uuid_generate_v4();
 
+  -- First pass: calculate total
+  FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
+  LOOP
+    v_qty := (v_item->>'quantity')::NUMERIC;
+    v_cost := (v_item->>'unit_cost')::NUMERIC;
+    v_total := v_total + (v_qty * v_cost);
+  END LOOP;
+
+  v_paid := COALESCE(p_paid_amount, CASE WHEN p_payment_method = 'credit' THEN 0 ELSE v_total END);
+  IF v_paid >= v_total THEN v_status := 'paid';
+  ELSIF v_paid > 0 THEN v_status := 'partial';
+  ELSE v_status := 'pending'; END IF;
+
+  -- Insert parent purchase FIRST so foreign keys in purchase_items succeed
+  INSERT INTO purchases (id, supplier_id, purchase_date, invoice_number, total_amount, paid_amount, payment_method, payment_status, notes)
+  VALUES (v_purchase_id, p_supplier_id, CURRENT_DATE, p_invoice_number, v_total, v_paid, p_payment_method, v_status, p_notes);
+
+  -- Insert child purchase_items and inventory movements
   FOR v_item IN SELECT * FROM jsonb_array_elements(p_items)
   LOOP
     v_prod_id := (v_item->>'product_id')::UUID;
     v_qty := (v_item->>'quantity')::NUMERIC;
     v_cost := (v_item->>'unit_cost')::NUMERIC;
-    v_total := v_total + (v_qty * v_cost);
 
     INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost)
     VALUES (v_purchase_id, v_prod_id, v_qty, v_cost);
@@ -545,14 +572,6 @@ BEGIN
     -- Update product cost_price
     UPDATE products SET cost_price = v_cost, updated_at = NOW() WHERE id = v_prod_id;
   END LOOP;
-
-  v_paid := COALESCE(p_paid_amount, CASE WHEN p_payment_method = 'credit' THEN 0 ELSE v_total END);
-  IF v_paid >= v_total THEN v_status := 'paid';
-  ELSIF v_paid > 0 THEN v_status := 'partial';
-  ELSE v_status := 'pending'; END IF;
-
-  INSERT INTO purchases (id, supplier_id, purchase_date, invoice_number, total_amount, paid_amount, payment_method, payment_status, notes)
-  VALUES (v_purchase_id, p_supplier_id, CURRENT_DATE, p_invoice_number, v_total, v_paid, p_payment_method, v_status, p_notes);
 
   INSERT INTO ledger_entries (entry_type, amount, description, reference_type, reference_id, entry_date)
   VALUES ('purchase', v_total, 'Purchase', 'purchase', v_purchase_id, CURRENT_DATE);
