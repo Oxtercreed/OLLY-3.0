@@ -61,14 +61,29 @@ const defaultNotifications = [
   },
 ]
 
+const NOTIF_STORAGE_KEY = 'olly_notifications_read_v1'
+
+function getInitialNotifications() {
+  try {
+    const readIds = JSON.parse(localStorage.getItem(NOTIF_STORAGE_KEY) || '[]')
+    return defaultNotifications.map((n) => ({
+      ...n,
+      unread: readIds.includes(n.id) ? false : n.unread,
+    }))
+  } catch {
+    return defaultNotifications
+  }
+}
+
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false)
   const [actionsOpen, setActionsOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
-  const [notifications, setNotifications] = useState(defaultNotifications)
+  const [notifications, setNotifications] = useState(getInitialNotifications)
   const location = useLocation()
   const navigate = useNavigate()
   const notifRef = useRef(null)
+  const mobileNotifRef = useRef(null)
 
   const isNewFlow =
     location.pathname.includes('/new') ||
@@ -78,25 +93,40 @@ export function AppShell() {
   const unreadCount = notifications.filter((n) => n.unread).length
 
   function markAllRead() {
-    setNotifications((prev) => prev.map((n) => ({ ...n, unread: false })))
+    setNotifications((prev) => {
+      const updated = prev.map((n) => ({ ...n, unread: false }))
+      try {
+        localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(updated.map((n) => n.id)))
+      } catch (e) {
+        console.error(e)
+      }
+      return updated
+    })
   }
 
   function handleNotifClick(notif) {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n))
-    )
+    setNotifications((prev) => {
+      const updated = prev.map((n) => (n.id === notif.id ? { ...n, unread: false } : n))
+      try {
+        const readIds = updated.filter((n) => !n.unread).map((n) => n.id)
+        localStorage.setItem(NOTIF_STORAGE_KEY, JSON.stringify(readIds))
+      } catch (e) {
+        console.error(e)
+      }
+      return updated
+    })
     setNotificationsOpen(false)
     if (notif.link) {
       navigate(notif.link)
     }
   }
 
-  // Close notifications on outside click
+  // Close notifications on outside click (for both desktop and mobile)
   useEffect(() => {
     function handleClickOutside(e) {
-      if (notifRef.current && !notifRef.current.contains(e.target)) {
-        setNotificationsOpen(false)
-      }
+      if (notifRef.current && notifRef.current.contains(e.target)) return
+      if (mobileNotifRef.current && mobileNotifRef.current.contains(e.target)) return
+      setNotificationsOpen(false)
     }
     if (notificationsOpen) {
       document.addEventListener('mousedown', handleClickOutside)
@@ -260,7 +290,10 @@ export function AppShell() {
             {notificationsOpen && (
               <div className="fixed inset-0 z-50 md:hidden">
                 <div className="absolute inset-0 bg-black/35 backdrop-blur-[2px]" onClick={() => setNotificationsOpen(false)} />
-                <div className="absolute top-16 inset-x-3 bg-white rounded-2xl shadow-2xl border border-[#E8E8E5] overflow-hidden max-h-[80vh] flex flex-col">
+                <div
+                  ref={mobileNotifRef}
+                  className="absolute top-16 inset-x-3 bg-white rounded-2xl shadow-2xl border border-[#E8E8E5] overflow-hidden max-h-[80vh] flex flex-col z-10"
+                >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-[#F0F0EB] bg-[#FAFAF8]">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm text-[#181818]">Notifications</span>
@@ -270,21 +303,27 @@ export function AppShell() {
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2">
                       {unreadCount > 0 && (
                         <button
                           type="button"
-                          onClick={markAllRead}
-                          className="text-xs text-[#707070] font-medium flex items-center gap-1"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            markAllRead()
+                          }}
+                          className="text-xs text-[#707070] active:text-[#181818] font-medium flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg active:bg-[#F2F2ED] cursor-pointer"
                         >
                           <CheckCheck className="w-3.5 h-3.5" />
-                          <span>Mark read</span>
+                          <span>Mark all read</span>
                         </button>
                       )}
                       <button
                         type="button"
-                        onClick={() => setNotificationsOpen(false)}
-                        className="p-1 text-[#707070]"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setNotificationsOpen(false)
+                        }}
+                        className="p-1.5 text-[#707070] active:text-[#181818] rounded-lg active:bg-[#F0F0ED] cursor-pointer"
                       >
                         <X className="w-4 h-4" />
                       </button>
