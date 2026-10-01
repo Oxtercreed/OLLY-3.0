@@ -207,7 +207,21 @@ export default function DashboardPage() {
 
         const toCollect = (custBal || []).reduce((s, r) => s + Number(r.outstanding || 0), 0)
         const toPay = (supBal || []).reduce((s, r) => s + Number(r.outstanding || 0), 0)
-        const low = (inv || []).filter((i) => i.products && Number(i.products.reorder_level || 0) > 0 && Number(i.quantity) <= Number(i.products.reorder_level))
+        const low = (inv || [])
+          .filter((i) => {
+            if (!i.products) return false
+            const q = Number(i.quantity) || 0
+            const reorder = Number(i.products.reorder_level) || 0
+            return q === 0 || (reorder > 0 && q <= reorder)
+          })
+          .map((i) => ({
+            id: i.products.id,
+            name: i.products.name,
+            type: i.products.type,
+            quantity: Number(i.quantity) || 0,
+            reorderLevel: Number(i.products.reorder_level) || 0,
+            statusText: 'Low stock',
+          }))
         const summary = { raw: 0, packaging: 0, finished: 0 }
         for (const i of inv || []) {
           if (!i.products) continue
@@ -651,42 +665,71 @@ export default function DashboardPage() {
                 to="/inventory"
                 className="group text-xs font-medium text-[#707070] hover:text-[#181818] flex items-center gap-1 transition-colors"
               >
-                View stock <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                View <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
               </Link>
             </div>
 
             {/* Clean 3 Tiles */}
-            <div className="grid grid-cols-3 gap-2.5 mb-3.5">
-              <div className="p-3.5 rounded-xl bg-[#FAFAF8] hover:bg-[#F2F2ED] transition-colors text-center">
-                <p className="text-2xl font-bold tracking-tight text-[#181818] tabular-nums">{displayRawCount}</p>
-                <p className="text-xs text-[#707070] mt-1">Raw</p>
+            <div className="grid grid-cols-3 gap-2 sm:gap-2.5 mb-3.5">
+              <div className="p-2.5 sm:p-3.5 rounded-xl bg-[#FAFAF8] hover:bg-[#F2F2ED] transition-colors text-center">
+                <p className="text-lg sm:text-2xl font-semibold sm:font-bold tracking-tight text-[#181818] tabular-nums">{displayRawCount}</p>
+                <p className="text-[11px] sm:text-xs text-[#707070] mt-1">Raw</p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[#FAFAF8] hover:bg-[#F2F2ED] transition-colors text-center">
-                <p className="text-2xl font-bold tracking-tight text-[#181818] tabular-nums">{displayPackagingCount}</p>
-                <p className="text-xs text-[#707070] mt-1">Packaging</p>
+              <div className="p-2.5 sm:p-3.5 rounded-xl bg-[#FAFAF8] hover:bg-[#F2F2ED] transition-colors text-center">
+                <p className="text-lg sm:text-2xl font-semibold sm:font-bold tracking-tight text-[#181818] tabular-nums">{displayPackagingCount}</p>
+                <p className="text-[11px] sm:text-xs text-[#707070] mt-1">Packaging</p>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-[#FAFAF8] hover:bg-[#F2F2ED] transition-colors text-center">
-                <p className="text-2xl font-bold tracking-tight text-[#181818] tabular-nums">{displayFinishedCount}</p>
-                <p className="text-xs text-[#707070] mt-1">Finished</p>
+              <div className="p-2.5 sm:p-3.5 rounded-xl bg-[#FAFAF8] hover:bg-[#F2F2ED] transition-colors text-center">
+                <p className="text-lg sm:text-2xl font-semibold sm:font-bold tracking-tight text-[#181818] tabular-nums">{displayFinishedCount}</p>
+                <p className="text-[11px] sm:text-xs text-[#707070] mt-1">Finished</p>
               </div>
             </div>
 
-            {/* Simple status line */}
-            <div className="flex items-center justify-between p-3 rounded-xl bg-[#FAFAF8]">
+            {/* Attention Section (Matching Image 4 with dynamic liveliness) */}
+            <div className="mt-3.5 pt-1">
               {lowStock.length === 0 ? (
-                <div className="flex items-center gap-2 text-xs text-[#1E754C] font-medium">
-                  <span className="w-2 h-2 rounded-full bg-[#10B981]" />
-                  <span>All stock levels healthy</span>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-[#FAFAF8] border border-[#F0F0EB]">
+                  <div className="flex items-center gap-2 text-xs sm:text-sm text-[#1E754C] font-medium">
+                    <span className="w-2 h-2 rounded-full bg-[#10B981]" />
+                    <span>All stock levels healthy</span>
+                  </div>
+                  <span className="text-xs text-[#707070]">Optimal</span>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 text-xs text-[#B7833F] font-medium">
-                  <span className="w-2 h-2 rounded-full bg-[#D97706]" />
-                  <span>{lowStock.length} items low in stock</span>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 mb-2 px-0.5">
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#D97706]" />
+                    </span>
+                    <p className="text-xs sm:text-sm font-medium text-[#9A6B2F]">
+                      {lowStock.length} {lowStock.length === 1 ? 'item needs' : 'items need'} attention
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    {lowStock.map((item) => (
+                      <Link
+                        key={item.id}
+                        to="/inventory"
+                        className="group/item flex items-center justify-between py-1.5 px-2.5 rounded-xl hover:bg-[#FAFAF8] transition-all duration-150 cursor-pointer border border-transparent hover:border-[#EFEFEA]"
+                      >
+                        <span className="text-xs sm:text-sm font-medium text-[#181818] group-hover/item:text-black truncate pr-2">
+                          {item.name}
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-xs sm:text-sm font-medium text-[#B7833F] group-hover/item:text-[#9A6B2F]">
+                            {item.statusText || 'Low stock'}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-[#B7833F] opacity-0 -translate-x-1 group-hover/item:opacity-100 group-hover/item:translate-x-0 transition-all duration-150" />
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               )}
-              <span className="text-xs text-[#707070]">Optimal</span>
             </div>
           </div>
 
@@ -732,7 +775,7 @@ export default function DashboardPage() {
                   To receive
                 </span>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold tracking-tight text-[#181818] tabular-nums my-2">
+              <p className="text-[22px] sm:text-3xl font-semibold sm:font-bold tracking-tight text-[#181818] tabular-nums my-2">
                 {formatMoney(displayToCollect)}
               </p>
             </div>
@@ -758,7 +801,7 @@ export default function DashboardPage() {
                   To pay
                 </span>
               </div>
-              <p className="text-2xl sm:text-3xl font-bold tracking-tight text-[#181818] tabular-nums my-2">
+              <p className="text-[22px] sm:text-3xl font-semibold sm:font-bold tracking-tight text-[#181818] tabular-nums my-2">
                 {formatMoney(displayToPay)}
               </p>
             </div>
