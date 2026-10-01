@@ -107,14 +107,12 @@ export default function StaffPage() {
 
   return (
     <div className="p-4 md:p-8 max-w-3xl mx-auto">
-      <div className="flex items-start sm:items-center justify-between gap-3 mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Staff</h1>
-          <p className="text-xs sm:text-sm text-[#707070] mt-0.5">Admin controls who can see and edit what</p>
+          <p className="text-sm text-[#707070] mt-0.5">Admin controls who can see and edit what</p>
         </div>
-        <Button onClick={startAdd} className="shrink-0 whitespace-nowrap">
-          <Plus className="w-4 h-4" /> Add staff
-        </Button>
+        <Button onClick={startAdd} className="shrink-0 whitespace-nowrap"><Plus className="w-4 h-4" /> Add staff</Button>
       </div>
 
       {loading ? (
@@ -122,10 +120,10 @@ export default function StaffPage() {
       ) : (
         <div className="space-y-3">
           {list.map((s) => (
-            <Card key={s.id} className="!p-4 sm:!p-5">
+            <Card key={s.id} className="!p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-base text-[#181818] truncate">{s.full_name}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-[#181818] truncate">{s.full_name}</p>
                   <p className="text-sm text-[#707070] truncate">{s.email}</p>
                   <span className={cn(
                     'inline-block mt-2 text-xs px-2.5 py-0.5 rounded-full capitalize font-medium',
@@ -134,20 +132,20 @@ export default function StaffPage() {
                     {s.role}{!s.is_active ? ' · inactive' : ''}
                   </span>
                 </div>
-                <div className="flex items-center gap-2 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#F0F0EB] shrink-0">
+                <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
                   {s.role !== 'admin' && (
                     <>
-                      <Button size="sm" variant="secondary" onClick={() => startEdit(s)} className="rounded-xl whitespace-nowrap">
+                      <Button size="sm" variant="secondary" onClick={() => startEdit(s)} className="text-xs sm:text-sm">
                         Permissions
                       </Button>
                       <button
                         type="button"
                         onClick={() => toggleActive(s)}
                         className={cn(
-                          'h-9 px-3 rounded-[10px] text-sm font-semibold transition-all duration-150 cursor-pointer shadow-2xs whitespace-nowrap',
+                          'h-9 px-3 text-xs sm:text-sm rounded-[10px] font-medium transition-all duration-150 cursor-pointer shadow-2xs shrink-0',
                           s.is_active
                             ? 'bg-[#FEF2F2] text-[#DC2626] border border-[#FCA5A5] hover:bg-[#FEE2E2] hover:border-[#F87171] active:scale-[0.98]'
-                            : 'bg-white text-[#181818] border border-[#E8E8E5] hover:bg-[#F7F7F5]'
+                            : 'bg-[#F0FDF4] text-[#16A34A] border border-[#86EFAC] hover:bg-[#DCFCE7] active:scale-[0.98]'
                         )}
                       >
                         {s.is_active ? 'Disable' : 'Enable'}
