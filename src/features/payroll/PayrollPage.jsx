@@ -122,20 +122,30 @@ export default function PayrollPage() {
       {loading ? (
         <div className="space-y-3">{[1,2,3].map((i) => <div key={i} className="skeleton h-16" />)}</div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {employees.map((e) => (
-            <Card key={e.id} className="!p-4 flex justify-between items-center">
-              <div>
-                <p className="font-medium">{e.name}</p>
-                <p className="text-xs text-[#707070] mt-0.5">{e.role || 'Staff'}</p>
+            <div
+              key={e.id}
+              className="bg-white border border-[#E8E8E5] rounded-2xl p-4 sm:p-5 flex flex-row items-center justify-between gap-3 transition-all duration-200 hover:border-[#D0D0CA] hover:shadow-xs"
+            >
+              <div className="min-w-0">
+                <p className="font-semibold text-base text-[#181818] truncate">{e.name}</p>
+                <p className="text-xs text-[#707070] mt-0.5 truncate">{e.role || 'Staff'}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <p className="font-semibold tabular-nums">{formatMoney(e.salary)}</p>
-                <Button size="sm" loading={paying === e.id} onClick={() => payEmployee(e)}>
+              <div className="flex items-center gap-3 shrink-0">
+                <p className="font-semibold tabular-nums text-sm sm:text-base text-[#181818] whitespace-nowrap">
+                  {formatMoney(e.salary)}
+                </p>
+                <Button
+                  size="sm"
+                  className="h-9 px-3.5 rounded-xl font-medium shrink-0"
+                  loading={paying === e.id}
+                  onClick={() => payEmployee(e)}
+                >
                   Pay
                 </Button>
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       )}
