@@ -394,15 +394,22 @@ export default function SalesPage() {
             {filtered.map((s) => (
               <button key={s.id} onClick={() => openDetail(s)} className="w-full text-left">
                 <Card className="!p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium">{getCustomerName(s)}</p>
-                      <p className="text-xs text-[#707070] mt-0.5">{s.sale_date} · {s.invoice_number}</p>
-                      {s.notes && <p className="text-xs text-[#707070] mt-0.5 line-clamp-1">{s.notes}</p>}
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm sm:text-base text-[#181818] truncate">{getCustomerName(s)}</p>
+                      <p className="text-xs text-[#707070] mt-0.5 truncate">{s.sale_date} · {s.invoice_number}</p>
+                      {s.notes && <p className="text-xs text-[#707070] mt-0.5 truncate">{s.notes}</p>}
                     </div>
-                    <p className="font-semibold tabular-nums">{formatMoney(s.total_amount)}</p>
+                    <p className="font-semibold tabular-nums text-sm sm:text-base text-[#181818] whitespace-nowrap shrink-0 text-right">
+                      {formatMoney(s.total_amount)}
+                    </p>
                   </div>
-                  <div className="mt-2"><StatusBadge status={s.payment_status} /></div>
+                  <div className="mt-2.5 flex items-center justify-between">
+                    <StatusBadge status={s.payment_status} />
+                    <span className="text-xs text-[#707070] capitalize">
+                      {s.payment_method?.replace('_', ' ')}
+                    </span>
+                  </div>
                 </Card>
               </button>
             ))}

@@ -368,14 +368,16 @@ export default function PurchasesPage() {
                 onClick={() => openDetail(p)}
                 className="!p-4 cursor-pointer hover:border-[#181818] transition-all"
               >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <p className="font-medium text-sm">{p.suppliers?.name || 'Local Market / Walk-in'}</p>
-                    <p className="text-xs text-[#707070] mt-0.5">
+                <div className="flex justify-between items-start gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-sm sm:text-base text-[#181818] truncate">{p.suppliers?.name || 'Local Market / Walk-in'}</p>
+                    <p className="text-xs text-[#707070] mt-0.5 truncate">
                       {p.purchase_date} · {p.invoice_number || '—'}
                     </p>
                   </div>
-                  <p className="font-semibold tabular-nums text-sm">{formatMoney(p.total_amount)}</p>
+                  <p className="font-semibold tabular-nums text-sm sm:text-base text-[#181818] whitespace-nowrap shrink-0 text-right">
+                    {formatMoney(p.total_amount)}
+                  </p>
                 </div>
                 <div className="mt-2.5 flex items-center justify-between">
                   <span className="text-xs text-[#707070] capitalize">
