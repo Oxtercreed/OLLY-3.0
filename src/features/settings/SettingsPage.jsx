@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, KeyRound, Eye, EyeOff } from 'lucide-react'
 import { useNavigate, Link } from 'react-router-dom'
 import { requestNotificationPermission, subscribePush, showLocalNotification } from '../../lib/push'
 import { supabase } from '../../lib/supabase'
@@ -30,6 +30,10 @@ export default function SettingsPage() {
   const [newProduct, setNewProduct] = useState({ name: '', type: 'finished_good', unit: 'pcs', selling_price: '', cost_price: '', reorder_level: '', opening_stock: '' })
   const [profile, setProfile] = useState({ full_name: '', business_name: 'OLLY', phone: '' })
   const [editProduct, setEditProduct] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [passwordLoading, setPasswordLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   async function load() {
     setLoading(true)
@@ -72,6 +76,31 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleChangePassword(e) {
+    if (e) e.preventDefault()
+    if (!newPassword || newPassword.length < 6) {
+      addToast(lang === 'sw' ? 'Nenosiri lazima liwe na herufi 6 au zaidi' : 'Password must be at least 6 characters', 'error')
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      addToast(lang === 'sw' ? 'Manenosiri hayafanani' : 'Passwords do not match', 'error')
+      return
+    }
+    setPasswordLoading(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) throw error
+      addToast(lang === 'sw' ? 'Nenosiri limesasishwa kikamilifu!' : 'Password updated successfully!', 'success')
+      setNewPassword('')
+      setConfirmPassword('')
+      setShowPassword(false)
+    } catch (err) {
+      addToast(err.message || 'Failed to update password', 'error')
+    } finally {
+      setPasswordLoading(false)
+    }
+  }
+
   function openRecipe(recipe) {
     setEditRecipe(recipe)
     setRecipeItems(
@@ -100,18 +129,16 @@ export default function SettingsPage() {
         const { data, error } = await supabase.from('recipes').insert({ product_id: editRecipe.product_id, name: editRecipe.name, yield_quantity: 1 }).select().single()
         if (error) throw error
         recipeId = data.id
-      } else {
-        await supabase.from('recipe_items').delete().eq('recipe_id', recipeId)
       }
-      if (recipeItems.length > 0) {
+      await supabase.from('recipe_items').delete().eq('recipe_id', recipeId)
+      const validItems = recipeItems.filter((i) => i.product_id && Number(i.quantity) > 0)
+      if (validItems.length > 0) {
         const { error } = await supabase.from('recipe_items').insert(
-          recipeItems.filter((i) => i.product_id && i.quantity > 0).map((i) => ({
-            recipe_id: recipeId, product_id: i.product_id, quantity: i.quantity,
-          }))
+          validItems.map((i) => ({ recipe_id: recipeId, product_id: i.product_id, quantity: Number(i.quantity) }))
         )
         if (error) throw error
       }
-      addToast(lang === 'sw' ? 'Mapishi yamehifadhiwa' : 'Recipe saved')
+      addToast(lang === 'sw' ? 'Kichocheo kimehifadhiwa' : 'Recipe saved')
       setEditRecipe(null)
       await load()
     } catch (e) {
@@ -128,21 +155,28 @@ export default function SettingsPage() {
       const { data: prod, error } = await supabase.from('products').insert({
         name: newProduct.name.trim(),
         type: newProduct.type,
-        unit: newProduct.unit || 'pcs',
-        selling_price: Number(newProduct.selling_price) || 0,
+        unit: newProduct.unit.trim() || 'pcs',
         cost_price: Number(newProduct.cost_price) || 0,
+        selling_price: newProduct.type === 'finished_good' ? (Number(newProduct.selling_price) || 0) : 0,
         reorder_level: Number(newProduct.reorder_level) || 0,
+        is_active: true,
       }).select().single()
       if (error) throw error
-      const opening = Number(newProduct.opening_stock) || 0
-      if (opening !== 0 && prod?.id) {
-        const { error: mErr } = await supabase.rpc('adjust_stock', {
-          p_product_id: prod.id,
-          p_quantity: opening,
-          p_notes: 'Opening stock',
+
+      if (Number(newProduct.opening_stock) > 0) {
+        await supabase.from('inventory_balances').upsert({
+          product_id: prod.id,
+          quantity: Number(newProduct.opening_stock),
         })
-        if (mErr) throw mErr
+        await supabase.from('inventory_movements').insert({
+          product_id: prod.id,
+          movement_type: 'adjustment',
+          quantity: Number(newProduct.opening_stock),
+          unit_cost: Number(newProduct.cost_price) || 0,
+          notes: 'Opening stock',
+        })
       }
+
       addToast(lang === 'sw' ? 'Bidhaa imeongezwa' : 'Product added')
       setShowAddProduct(false)
       setNewProduct({ name: '', type: 'finished_good', unit: 'pcs', selling_price: '', cost_price: '', reorder_level: '', opening_stock: '' })
@@ -260,6 +294,51 @@ export default function SettingsPage() {
               </button>
             </div>
           </Card>
+
+          <Card className="space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <KeyRound className="w-4 h-4 text-[#707070]" />
+              <p className="font-medium">{lang === 'sw' ? 'Badili Nenosiri' : 'Change Password'}</p>
+            </div>
+            <p className="text-xs text-[#707070]">
+              {lang === 'sw'
+                ? 'Weka nenosiri jipya lenye herufi zisizopungua 6'
+                : 'Enter a new password with at least 6 characters'}
+            </p>
+            <div className="relative">
+              <Input
+                label={lang === 'sw' ? 'Nenosiri jipya' : 'New password'}
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={6}
+              />
+              <button
+                type="button"
+                className="absolute right-3 top-[34px] text-[#707070] hover:text-[#181818] transition-colors p-1"
+                onClick={() => setShowPassword((prev) => !prev)}
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+            <Input
+              label={lang === 'sw' ? 'Thibitisha nenosiri' : 'Confirm password'}
+              type={showPassword ? 'text' : 'password'}
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={6}
+            />
+            <Button
+              loading={passwordLoading}
+              onClick={handleChangePassword}
+              disabled={!newPassword || !confirmPassword}
+            >
+              {lang === 'sw' ? 'Sasisha Nenosiri' : 'Update Password'}
+            </Button>
+          </Card>
         </div>
       )}
 
@@ -375,10 +454,10 @@ export default function SettingsPage() {
                       i === idx ? { ...it, product_id: e.target.value, name: mat?.name, unit: mat?.unit } : it
                     ))
                   }}>
-                  <option value="">Select...</option>
-                  {allMaterials.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
-                  ))}
+                    <option value="">Select...</option>
+                    {allMaterials.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name} ({m.unit})</option>
+                    ))}
                 </select>
               </div>
               <div className="w-28">
