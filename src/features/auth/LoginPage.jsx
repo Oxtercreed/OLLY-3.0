@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
+import { supabase } from '../../lib/supabase'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 
@@ -14,6 +15,25 @@ export default function LoginPage() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
   const [info, setInfo] = useState(null)
+
+  async function handleForgotPassword() {
+    if (!email) {
+      setError('Please enter your email above first')
+      return
+    }
+    setError(null)
+    setInfo(null)
+    setLoading(true)
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email)
+      if (error) throw error
+      setInfo('Password reset instructions sent to your email.')
+    } catch (err) {
+      setError(err.message || 'Failed to send reset email')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -53,7 +73,29 @@ export default function LoginPage() {
             <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Owner name" required />
           )}
           <Input label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@business.com" required />
-          <Input label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" required minLength={6} />
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm text-[#707070]">Password</label>
+              {mode === 'login' && (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  className="text-xs text-[#707070] hover:text-[#181818] underline"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+              minLength={6}
+              className="w-full h-11 px-4 rounded-xl border border-[#E8E8E5] bg-white text-[#181818] focus:outline-none focus:ring-2 focus:ring-[#181818]/10 focus:border-[#181818] placeholder:text-[#A0A0A0]"
+            />
+          </div>
           {error && <p className="text-sm text-[#B4534A]">{error}</p>}
           {info && <p className="text-sm text-[#3F8065]">{info}</p>}
           <Button type="submit" className="w-full" size="lg" loading={loading}>
